@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.WallShift" parent="Theme.Material3.DayNight.NoActionBar">
+        <item name="colorPrimary">#D71921</item>
+        <item name="colorOnPrimary">#FFFFFF</item>
+        <item name="colorSecondaryContainer">#F3D6D7</item>
+        <item name="colorOnSecondaryContainer">#410003</item>
+    </style>
+</resources>
