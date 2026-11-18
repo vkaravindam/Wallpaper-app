@@ -11,8 +11,13 @@ android {
         applicationId = "com.aravind.wallshift"
         minSdk = 26
         targetSdk = 34
-        versionCode = 1
-        versionName = "1.0"
+        // GitHub Actions sets this from the run number, so every build is newer than the last.
+        val build = System.getenv("WALLSHIFT_VERSION_CODE")?.toIntOrNull() ?: 1
+        versionCode = build
+        versionName = "2.0 (build $build)"
+
+        // Repo whose GitHub Releases the in-app updater checks.
+        buildConfigField("String", "UPDATE_REPO", "\"vkaravindam/Wallpaper-app\"")
     }
 
     // A fixed keystore committed with the project, so every CI build is signed
@@ -45,6 +50,7 @@ android {
     }
     buildFeatures {
         viewBinding = true
+        buildConfig = true
     }
 }
 

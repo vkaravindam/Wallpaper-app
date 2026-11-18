@@ -1,9 +1,9 @@
 package com.aravind.wallshift
 
 import android.graphics.Bitmap
-import android.graphics.BitmapFactory
 import android.util.LruCache
 import android.view.LayoutInflater
+import android.view.View
 import android.view.ViewGroup
 import androidx.recyclerview.widget.RecyclerView
 import com.aravind.wallshift.databinding.ItemWallpaperBinding
@@ -19,27 +19,24 @@ class WallpaperAdapter(
 ) : RecyclerView.Adapter<WallpaperAdapter.VH>() {
 
     private var items: List<File> = emptyList()
-    var currentName: String? = null
+    private var homeName: String? = null
+    private var lockName: String? = null
 
-    private val cache = object : LruCache<String, Bitmap>(24 * 1024 * 1024) {
+    private val cache = object : LruCache<String, Bitmap>(32 * 1024 * 1024) {
         override fun sizeOf(key: String, value: Bitmap) = value.byteCount
     }
 
-    fun submit(files: List<File>, current: String?) {
+    fun submit(files: List<File>, home: String?, lock: String?) {
         items = files
-        currentName = current
+        homeName = home
+        lockName = lock
         notifyDataSetChanged()
     }
 
     class VH(val b: ItemWallpaperBinding) : RecyclerView.ViewHolder(b.root)
 
-    override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): VH {
-        val b = ItemWallpaperBinding.inflate(LayoutInflater.from(parent.context), parent, false)
-        // 3 columns, phone-shaped (9:16) tiles
-        val tileW = parent.measuredWidth / 3
-        if (tileW > 0) b.root.layoutParams.height = tileW * 16 / 9
-        return VH(b)
-    }
+    override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): VH =
+        VH(ItemWallpaperBinding.inflate(LayoutInflater.from(parent.context), parent, false))
 
     override fun getItemCount() = items.size
 
@@ -47,25 +44,30 @@ class WallpaperAdapter(
         val file = items[position]
         val img = holder.b.thumb
         img.tag = file.path
-        holder.b.currentBadge.visibility =
-            if (file.name == currentName) android.view.View.VISIBLE else android.view.View.GONE
         holder.b.root.setOnClickListener { onClick(file) }
 
-        cache.get(file.path)?.let { img.setImageBitmap(it); return }
+        val onHome = file.name == homeName
+        val onLock = file.name == lockName
+        holder.b.currentBadge.visibility = if (onHome || onLock) View.VISIBLE else View.GONE
+        holder.b.currentBadge.text = when {
+            onHome && onLock -> "Home + Lock"
+            onHome -> "Home"
+            else -> "Lock"
+        }
+        val label = Media.label(file)
+        holder.b.typeBadge.visibility = if (label != null) View.VISIBLE else View.GONE
+        holder.b.typeBadge.text = label ?: ""
+
+        val cached = cache.get(file.path)
+        if (cached != null) {
+            img.setImageBitmap(cached)
+            return
+        }
         img.setImageDrawable(null)
         scope.launch {
-            val bmp = withContext(Dispatchers.IO) { decodeThumb(file) } ?: return@launch
+            val bmp = withContext(Dispatchers.IO) { Media.stillFrame(file, 240, 427) } ?: return@launch
             cache.put(file.path, bmp)
             if (img.tag == file.path) img.setImageBitmap(bmp)
         }
-    }
-
-    private fun decodeThumb(file: File, target: Int = 360): Bitmap? {
-        val o = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-        BitmapFactory.decodeFile(file.path, o)
-        if (o.outWidth <= 0) return null
-        var s = 1
-        while (o.outWidth / (s * 2) >= target && o.outHeight / (s * 2) >= target) s *= 2
-        return BitmapFactory.decodeFile(file.path, BitmapFactory.Options().apply { inSampleSize = s })
     }
 }

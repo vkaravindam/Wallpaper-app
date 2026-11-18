@@ -1,6 +1,9 @@
 package com.aravind.wallshift
 
+import android.app.WallpaperManager
+import android.content.ComponentName
 import android.content.Context
+import android.content.Intent
 import androidx.work.CoroutineWorker
 import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.PeriodicWorkRequestBuilder
@@ -13,7 +16,21 @@ import kotlin.random.Random
 object Rotator {
     private const val WORK_NAME = "wallshift_rotation"
 
-    /** Picks the next wallpaper according to the order setting and remembers it. */
+    /** True when WallShift's live wallpaper is the current home screen wallpaper. */
+    fun isLiveActive(context: Context): Boolean = try {
+        WallpaperManager.getInstance(context).wallpaperInfo?.packageName == context.packageName
+    } catch (e: Exception) {
+        false
+    }
+
+    /** Opens the system screen that applies WallShift's live wallpaper. */
+    fun liveWallpaperIntent(context: Context): Intent =
+        Intent(WallpaperManager.ACTION_CHANGE_LIVE_WALLPAPER).putExtra(
+            WallpaperManager.EXTRA_LIVE_WALLPAPER_COMPONENT,
+            ComponentName(context, LiveWallpaperService::class.java)
+        )
+
+    /** Picks the next wallpaper according to the order setting. */
     private fun pickNext(context: Context, prefs: Prefs): File? {
         val files = WallpaperStore.list(context)
         if (files.isEmpty()) return null
@@ -36,9 +53,38 @@ object Rotator {
         return applyFile(context, file)
     }
 
+    /**
+     * Applies [file] to the screens chosen in settings.
+     * - Home with the live wallpaper active: the live wallpaper switches to it (animations
+     *   play, wide images pan with home pages).
+     * - Home without it: a normal static wallpaper (still frame for GIFs/videos).
+     * - Lock: a static image, except "Both" with the live wallpaper active, where the lock
+     *   screen shows the live wallpaper too.
+     */
     fun applyFile(context: Context, file: File): Boolean {
         val prefs = Prefs(context)
-        val ok = WallpaperSetter.apply(context, file, prefs.target)
+        val target = prefs.target
+        val live = isLiveActive(context)
+        val wm = WallpaperManager.getInstance(context)
+        var ok = true
+
+        if (target != WallTarget.LOCK) {
+            prefs.homeFileName = file.name
+            if (!live) {
+                ok = WallpaperSetter.setStatic(context, file, WallpaperManager.FLAG_SYSTEM, prefs.parallax)
+            }
+        }
+        if (target != WallTarget.HOME) {
+            if (live && target == WallTarget.BOTH) {
+                // Remove any separate lock image so the lock screen mirrors the live wallpaper.
+                try {
+                    if (wm.getWallpaperId(WallpaperManager.FLAG_LOCK) >= 0) wm.clear(WallpaperManager.FLAG_LOCK)
+                } catch (_: Exception) {}
+            } else {
+                ok = WallpaperSetter.setStatic(context, file, WallpaperManager.FLAG_LOCK, false) && ok
+            }
+            prefs.lockFileName = file.name
+        }
         if (ok) {
             prefs.lastFileName = file.name
             prefs.lastChangedAt = System.currentTimeMillis()

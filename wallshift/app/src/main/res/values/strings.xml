@@ -1,4 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">WallShift</string>
+    <string name="wallpaper_description">Rotates your WallShift wallpapers. Plays GIFs and videos and scrolls wide images with your home screen pages.</string>
 </resources>
